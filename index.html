@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>보드게임 매니저</title>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; background-color: #2c3e50; color: white; display: flex; flex-direction: column; align-items: center; }
+        .controls { margin-bottom: 20px; padding: 20px; background: #34495e; border-radius: 10px; }
+        button { padding: 10px 20px; cursor: pointer; font-weight: bold; margin: 0 5px; }
+        button:disabled { cursor: not-allowed; opacity: 0.5; }
+        
+        .game-board { display: flex; gap: 40px; justify-content: center; flex-wrap: wrap; }
+        .deck-section { display: flex; flex-direction: column; align-items: center; border: 1px solid #7f8c8d; padding: 15px; border-radius: 10px; width: 320px; }
+        
+        .card-slot { display: flex; flex-direction: column; gap: 10px; align-items: center; margin-top: 10px; }
+        .deck-visual { width: 150px; height: 50px; border: 2px solid #fff; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; text-align: center; font-size: 0.9em; box-sizing: border-box; transition: background 0.2s; }
+        
+        .deck-event { background: #ecf0f1; color: #2c3e50; }
+        .deck-event:hover { background: #bdc3c7; }
+        
+        .deck-explore { background: #3498db; color: white; }
+        .deck-explore:hover { background: #2980b9; }
+        
+        .deck-damage { background: #e74c3c; color: white; }
+        .deck-damage:hover { background: #c0392b; }
+        
+        .card-display { width: 240px; height: 360px; background: white; color: black; border-radius: 8px; padding: 10px; box-sizing: border-box; display: none; border: 2px solid #f1c40f; position: relative; }
+        .card-display.show { display: block; }
+        .card-title { font-weight: bold; font-size: 0.9em; border-bottom: 1px solid #ddd; margin-bottom: 5px; }
+        .card-keyword { font-size: 0.7em; color: #e67e22; margin-bottom: 5px; }
+        .card-effect { font-size: 0.8em; line-height: 1.2; }
+        .count { font-size: 0.8em; margin-top: 5px; color: #bdc3c7; }
+    </style>
+</head>
+<body>
+
+    <h1>Board Game Card Manager</h1>
+
+    <div class="controls">
+        <button id="addLvl2">2단계 카드 추가</button>
+        <button id="addLvl3" disabled>3단계 카드 추가</button>
+        <button id="resetBtn" style="background-color: #e74c3c; color: white; border: none;">리셋</button>
+    </div>
+
+    <div class="game-board">
+        <div class="deck-section">
+            <h3>사건 카드</h3>
+            <div class="card-slot">
+                <div class="deck-visual deck-event" onclick="drawCard('event')">사건 카드<br>(뽑기)</div>
+                <div id="event-card" class="card-display"></div>
+            </div>
+            <div id="event-count" class="count">남은 카드: 0</div>
+        </div>
+
+        <div class="deck-section">
+            <h3>탐사 카드</h3>
+            <div class="card-slot">
+                <div class="deck-visual deck-explore" onclick="drawCard('explore')">탐사 카드<br>(뽑기)</div>
+                <div id="explore-card" class="card-display"></div>
+            </div>
+            <div id="explore-count" class="count">남은 카드: 0</div>
+        </div>
+
+        <div class="deck-section">
+            <h3>손상 카드</h3>
+            <div class="card-slot">
+                <div class="deck-visual deck-damage" onclick="drawCard('damage')">손상 카드<br>(뽑기)</div>
+                <div id="damage-card" class="card-display"></div>
+            </div>
+            <div id="damage-count" class="count">남은 카드: 0</div>
+        </div>
+    </div>
+
+<script>
+    // 1. 초기 데이터 (실제 서비스 시 fetch('cards.json')으로 불러오게 설계 가능)
+    const allCardData = {
+        event: [
+            { id: 101, level: 1, title: "태양 폭풍", keyword: "", effect: "방호벽 없으면 동면 인구 1개 제거" },
+            { id: 102, level: 1, title: "EMP 폭풍", keyword: "", effect: "사이보그 일꾼 1개 제거" },
+            { id: 103, level: 1, title: "소행성대 진입", keyword: "", effect: "모든 플레이어의 우주선 이동력 -1" },
+            { id: 104, level: 1, title: "우주 해적의 습격", keyword: "", effect: "자원 5개 제거 (전투 기술이 가장 높은 플레이어 제외)." },
+            { id: 105, level: 1, title: "가스 성운 통과", keyword: "", effect: "모든 플레이어의 식량 자원 2개 제거" },
+            { id: 106, level: 1, title: "CME 폭발", keyword: "", effect: "모든 플레이어의 연구 시설 손상(1턴)." },
+            { id: 107, level: 1, title: "운석 충돌", keyword: "", effect: "함선 손상 덱에서 1장을 뽑아서 효과 적용" },
+            { id: 108, level: 1, title: "추진기 손상", keyword: "", effect: "추진기에 고장 마커를 놓음. 방호벽 마커로 무효화 불가" },
+            { id: 109, level: 1, title: "극저온 코어 손상", keyword: "", effect: "동면 인구 -2/턴 (다음 턴까지 지속)" },
+            { id: 110, level: 1, title: "파편 폭풍", keyword: "", effect: "방호벽 마커 소모 or 함교 손상." },
+            { id: 111, level: 2, title: "좌표 상실", keyword: "", effect: "지금까지 공개된 행성카드를 모두 섞어서 다시 배치" },
+            { id: 112, level: 2, title: "그 누구보다 더 멀리", keyword: "트라우마", effect: "가장 멀리 간 세력은 일꾼 1개 제거 또는 트라우마 키워드 획득" },
+            { id: 113, level: 2, title: "알 수 없는 감염", keyword: "", effect: "의료 기술이 제일 낮은 플레이어 동면 인구 1개 제거" },
+            { id: 114, level: 2, title: "인공지능 특이점", keyword: "특이점", effect: "AGI인 플레이어는 ’특이점’ 키워드 획득하고 ASI로 무료 업그레이드." },
+            { id: 115, level: 2, title: "인공지능의 반란", keyword: "특이점", effect: "'특이점' 키워드가 있다면<br>전투 스킬이 3 이하일 경우, AI가 함교를 장악함<br>다음 턴 가용 행동 수 1개 감소" },
+            { id: 116, level: 2, title: "리플리컨트 퇴직", keyword: "개조인간", effect: "1. 퇴직 (권리 부여): 리플리컨트 2개 제거(퇴직)<br> ◦ 즉시: '개조 인간' 키워드 획득<br>2. 무시 (억압): 다음 연구 행동 일꾼 비용 -1.<br> ◦ 군사 세력: 추가 전투 데이터 마커 1개 획득 (진압 경험)<br><br>리플리컨트가 없다면 아무 효과 없음" },
+            { id: 117, level: 2, title: "깨달음", keyword: "트라우마", effect: "'트라우마' 키워드가 있다면 개조인간 1개 제거" },
+            { id: 118, level: 2, title: "가르간투아 블랙홀", keyword: "", effect: "웜홀에 가장 가까운 플레이어: 추진기 손상 발생<br>아무 데이터 토큰 3개 제거" },
+            { id: 119, level: 2, title: "붕괴되는 정신", keyword: "정신착란", effect: "정신착란 키워드가 있다면 일반 일꾼 1개 제거 후 함선 손상 덱에서 한 장을 뽑아 처리" },
+            { id: 120, level: 2, title: "외계 기술 역설계", keyword: "고대", effect: "고대 키워드가 있다면 아무 기술 1개 즉시 1단계 업그레이드" },
+            { id: 121, level: 3, title: "웜홀 항법", keyword: "웜홀", effect: "웜홀 키워드가 있다면 다음 턴 이동력 +3" },
+            { id: 122, level: 3, title: "효율적 변이", keyword: "변이", effect: "활성 대원의 식량 소비량이 1/2(올림)으로 줄어듦" },
+            { id: 123, level: 3, title: "자기 파멸적 행동", keyword: "정신착란", effect: "정신착란 키워드가 있다면 D10를 굴려 4이하가 나오면 일꾼 2개 제거" },
+            { id: 124, level: 3, title: "함내 폭동", keyword: "변이", effect: "'변이' 키워드가 있다면<br>D10을 굴린 결과가 자신의 전투 기술 레벨 이하라면 일꾼 2개 제거." },
+            { id: 125, level: 3, title: "특이점은 시작됐다.", keyword: "특이점", effect: "AGI/ASI가 있다면 아무 기술 1/2개를 다음 단계로 업그레이드." },
+            { id: 126, level: 3, title: "HAL", keyword: "특이점", effect: "'특이점' 키워드가 있다면, <br>일꾼 2개 제거 그리고 함선 손상 카드 1개 뽑아 효과 적용" },
+            { id: 127, level: 3, title: "기계의 반란", keyword: "개조인간", effect: "개조인간 키워드 있다면, 4 미만인 경우 개조 인간 3개 제거<br>(전투 스킬 4이상인 경우 이벤트 무효)" },
+            { id: 128, level: 3, title: "광기 잠식", keyword: "", effect: "AI 또는 개조 인간 2개를 희생하면 아무 기술 데이터 2개 획득<br>무시하면 함선 손상 카드 1개 뽑아 효과 적용" },
+            { id: 129, level: 3, title: "리마 프로젝트", keyword: "트라우마, 정신착란", effect: "트라우마와 정신 착란 키워드가 있는 경우<br> ◦ 동면 인구 -3개 제거 또는 기술 스탯 각각 -1" },
+            { id: 130, level: 3, title: "스타 차일드", keyword: "", effect: "동면 인구를 5개 희생하면 모든 기술 1단계씩 업그레이드" }
+        ],
+        explore: [
+            { id: 201, level: 1, title: "모놀리스", keyword: "고대", effect: "데이터 토큰 2개, 고대 키워드 획득" },
+            { id: 202, level: 1, title: "지반 붕괴", keyword: "트라우마", effect: "탐사 대원 절반 사망(올림), 트라우마 키워드" },
+            { id: 203, level: 1, title: "시추 실패", keyword: "", effect: "다음 턴 유인 탐사 불가" },
+            { id: 204, level: 1, title: "숭고한 희생", keyword: "", effect: "탐사대원 1개 희생하면 자원/데이터 +2 추가 획득." },
+            { id: 205, level: 1, title: "모래 폭풍", keyword: "", effect: "D10 굴림: 4 이하 성공(자원/데이터 +1 추가 획득), 실패 시 격납고 손상." },
+            { id: 206, level: 1, title: "구조 신호 감지", keyword: "제노모프", effect: "제노모프 키워드 획득, 외계 생물학 데이터 토큰 +1" },
+            { id: 207, level: 1, title: "정체불명 신호 증폭", keyword: "", effect: "데이터 토큰 +1 획득. 이벤트 카드 1장 추가 공개" },
+            { id: 208, level: 1, title: "저중력 사고", keyword: "", effect: "활성 일꾼 1개 제거" },
+            { id: 209, level: 1, title: "미지의 바이러스", keyword: "바이러스", effect: "다음 턴 증원 행동 불가. 바이러스 키워드 획득" },
+            { id: 210, level: 1, title: "포자 감염", keyword: "포자", effect: "• 농업 또는 의료 기술 +1<br>• 동면 인구 1 감소<br>포자 키워드 획득(포자 행성에서 불리한 점수)" },
+            { id: 211, level: 2, title: "폐허 속 자동 방어 시스템", keyword: "고대", effect: "고대 키워드 있다면 데이터 토큰 +1, 그렇지 않다면 탐사대원 1개 제거." },
+            { id: 212, level: 2, title: "고요한 관측", keyword: "트라우마", effect: "트라우마 키워드가 있다면 데이터 +1" },
+            { id: 213, level: 2, title: "선원들은 희생되어도 상관없음", keyword: "제노모프", effect: "제노모프 키워드가 있다면<br>• 탐사대에 사이보그가 있다면 탐사대원 전원 사망 및 이번 탐사로 자원/데이터 획득 없음.<br>• 탐사대원 중 사이보그가 없다면 외계 생물학 데이터 +1" },
+            { id: 214, level: 2, title: "외계 생명체 탈출", keyword: "", effect: "외계 생물학 데이터 1개 제거" },
+            { id: 215, level: 2, title: "얼음 아래 생명", keyword: "", effect: "외계 생물학 데이터 토큰 +2" },
+            { id: 216, level: 2, title: "신체 개조 제안", keyword: "개조인간", effect: "개조인간 키워드 획득 탐사대원 1개 제거하고 사이보그 대원 1개 획득" },
+            { id: 217, level: 2, title: "생체 구조 재편", keyword: "변이", effect: "외계 생물학 데이터 +2. 변이 키워드 획득" },
+            { id: 218, level: 2, title: "인공 지능 치명적 오류", keyword: "특이점", effect: "다음 턴 AI 일꾼 사용 불가" },
+            { id: 219, level: 2, title: "동면 실패", keyword: "", effect: "동면 인구 1 제거" },
+            { id: 220, level: 2, title: "예상치 못한 귀환", keyword: "웜홀", effect: "웜홀 키워드 획득, 웜홀 박스에 있는 일꾼 전부 회수" },
+            { id: 221, level: 3, title: "기억 손실", keyword: "트라우마", effect: "트라우마 키워드 있다면 데이터 토큰 1개 제거. 다음 연구 행동 비용 +1" },
+            { id: 222, level: 3, title: "사건의 지평선", keyword: "웜홀, 정신착란", effect: "웜홀 이벤트가 있다면 정신 착란 키워드 획득하거나 활성 대원 3개 제거" },
+            { id: 223, level: 3, title: "동면 격리 실패", keyword: "", effect: "동면 인구 2개 제거" },
+            { id: 224, level: 3, title: "그녀한테서 떨어져 이 썅년아", keyword: "제노모프", effect: "제노모프 키워드가 있는 경우, 탐사원 1개만 남겨놓고 모두 제거<br>키워드가 없다면 격납고 손상/활성 일꾼 2개 제거" },
+            { id: 225, level: 3, title: "격리 실패", keyword: "포자", effect: "포자 키워드가 있다면 탐사 대원 몰살, 없다면 테라포밍 데이터 +2." },
+            { id: 226, level: 3, title: "생체 실험", keyword: "", effect: "탐사 대원 하나를 제거, 데이터 +2" },
+            { id: 227, level: 3, title: "통제 불능 진화", keyword: "변이", effect: "변이 키워드가 있다면 탐사대원 2개 제거" },
+            { id: 228, level: 3, title: "귀환은 선택이 아니다", keyword: "", effect: "활성 일꾼 2 제거. 대신 데이터 +2" },
+            { id: 229, level: 3, title: "인류 관측 종료", keyword: "", effect: "점수 계산 시 기술 점수 -2" },
+            { id: 230, level: 3, title: "신은 응답하지 않는다", keyword: "", effect: "키워드 2개 무효화" }
+        ],
+        damage: [
+            { id: 301, level: 1, title: "동면구역", keyword: "", effect: "턴 마다 동면 인구수 감소" },
+            { id: 302, level: 1, title: "함교", keyword: "", effect: "가용 행동 감소" },
+            { id: 303, level: 1, title: "격납고", keyword: "", effect: "탐사 행동 불가" },
+            { id: 304, level: 1, title: "연구 시설", keyword: "", effect: "연구 행동 불가" },
+            { id: 305, level: 1, title: "추진기", keyword: "", effect: "이동력 감소" },
+            { id: 306, level: 1, title: "거주 구역", keyword: "", effect: "일꾼 Pool 감소" },
+            { id: 307, level: 1, title: "방호벽", keyword: "", effect: "방사선대, 기타 이벤트 발생시 일꾼 감소" },
+            { id: 308, level: 1, title: "농업 시설", keyword: "", effect: "식량 생산 감소" },
+            { id: 309, level: 1, title: "동면구역", keyword: "", effect: "턴 마다 동면 인구수 감소" },
+            { id: 310, level: 1, title: "함교", keyword: "", effect: "가용 행동 감소" },
+            { id: 311, level: 1, title: "격납고", keyword: "", effect: "탐사 행동 불가" },
+            { id: 312, level: 1, title: "연구 시설", keyword: "", effect: "연구 행동 불가" },
+            { id: 313, level: 1, title: "추진기", keyword: "", effect: "이동력 감소" },
+            { id: 314, level: 1, title: "거주 구역", keyword: "", effect: "일꾼 Pool 감소" },
+            { id: 315, level: 1, title: "방호벽", keyword: "", effect: "방사선대, 기타 이벤트 발생시 일꾼 감소" },
+            { id: 316, level: 1, title: "농업 시설", keyword: "", effect: "식량 생산 감소" }
+        ]
+    };
+
+    // 2. 상태 관리 변수
+    let currentDecks = { event: [], explore: [], damage: [] };
+    let discardedDecks = { event: [], explore: [], damage: [] };
+    let currentLevel = 1;
+
+    // 3. 셔플 함수 (Fisher-Yates)
+    function shuffle(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
+    // 4. 초기화 및 리셋 기능
+    function initGame() {
+        currentLevel = 1;
+        document.getElementById('addLvl2').disabled = false;
+        document.getElementById('addLvl3').disabled = true;
+        
+        for (let type in allCardData) {
+            currentDecks[type] = shuffle(allCardData[type].filter(c => c.level === 1));
+            discardedDecks[type] = [];
+            updateUI(type, null);
+        }
+    }
+
+    // 5. 카드 드로우 기능
+    function drawCard(type) {
+        // 덱이 비었으면 버림패 섞어서 새로 만들기
+        if (currentDecks[type].length === 0) {
+            if (discardedDecks[type].length === 0) {
+                alert("뽑을 수 있는 카드가 더 이상 없습니다!");
+                return;
+            }
+            alert("덱이 비어 버림 패를 다시 섞습니다.");
+            currentDecks[type] = shuffle([...discardedDecks[type]]);
+            discardedDecks[type] = [];
+        }
+
+        const card = currentDecks[type].pop();
+        discardedDecks[type].push(card);
+        updateUI(type, card);
+    }
+
+    // 6. 단계 추가 기능
+    function addLevel(level) {
+        if (level === 2) {
+            currentLevel = 2;
+            document.getElementById('addLvl2').disabled = true;
+            document.getElementById('addLvl3').disabled = false;
+        } else if (level === 3) {
+            currentLevel = 3;
+            document.getElementById('addLvl3').disabled = true;
+        }
+
+        for (let type in allCardData) {
+            const newCards = allCardData[type].filter(c => c.level === level);
+            currentDecks[type] = shuffle([...currentDecks[type], ...newCards]);
+        }
+        alert(`${level}단계 카드가 추가되어 섞였습니다!`);
+        updateUI();
+    }
+
+    // 7. UI 업데이트
+    function updateUI(type, card) {
+        const types = type ? [type] : ['event', 'explore', 'damage'];
+        
+        types.forEach(t => {
+            document.getElementById(`${t}-count`).innerText = `남은 카드: ${currentDecks[t].length}`;
+            
+            if (card && t === type) {
+                const display = document.getElementById(`${t}-card`);
+                const keywordHtml = card.keyword ? `<div class="card-keyword">[${card.keyword}]</div>` : '';
+                display.innerHTML = `
+                    <div class="card-title">${card.title}</div>
+                    ${keywordHtml}
+                    <div class="card-effect">${card.effect}</div>
+                    <div style="position:absolute; bottom:5px; right:5px; font-size:10px; color:#ccc;">Lv.${card.level}</div>
+                `;
+                display.classList.add('show');
+            } else if (!card && !type) {
+                // 리셋 시 혹은 카드 정보가 없을 때 화면 초기화
+                // document.getElementById(`${t}-card`).classList.remove('show');
+            }
+        });
+    }
+
+    // 이벤트 리스너
+    document.getElementById('addLvl2').onclick = () => addLevel(2);
+    document.getElementById('addLvl3').onclick = () => addLevel(3);
+    document.getElementById('resetBtn').onclick = () => {
+        if(confirm("모든 게임을 초기화할까요?")) initGame();
+    };
+
+    // 시작 시 실행
+    initGame();
+
+</script>
+</body>
+</html>
